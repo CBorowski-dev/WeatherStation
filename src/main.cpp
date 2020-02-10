@@ -1,5 +1,5 @@
 /*
-  Display (ST7735 controller) connection to ESP8266 (D1 mini)
+  Displayanschluss (ST7735 controller) an ESP8266 (D1 mini)
 
   Display SDO/MISO   to NodeMCU pin D6 = MISO = D6 (or leave disconnected if not reading TFT)
   Display LED        to NodeMCU pin VIN (or 5V, see below)
@@ -13,9 +13,9 @@
 
   OpenWeatherMap
 
-  Call: http://api.openweathermap.org/data/2.5/weather?q=<city>,de&units=metric&appid=<own_appid>
+  Aufruf: http://api.openweathermap.org/data/2.5/weather?q=Paderborn,de&units=metric&appid=ace5bc3e8d622c3d401c76220164c5f3
 
-  Libraries needed:
+  Benörigte Biblotheken:
   - ESP8266WiFi
   - TFT_eSPI
   - ArduinoJson
@@ -23,15 +23,16 @@
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <TFT_eSPI.h> // Graphics and font library for ST7735 driver chip
+#include <TFT_eSPI.h>       // Graphics and font library for ST7735 driver chip
 #include <SPI.h>
 #include <ArduinoJson.h>
+#include <PrivateData.h>    // Contains private data like ssid and password for WiFi
 
 TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
 // SSID/Password for WLAN
-const char* ssid = "";
-const char* password = "";
+const char* ssid = SSID;
+const char* password = PASSWORD;
 
 WiFiClient client;
 IPAddress ipAddress;
@@ -40,7 +41,7 @@ IPAddress ipAddress;
 const char* server = "api.openweathermap.org";
 
 // Unique URL resource
-const char* resource = "/data/2.5/weather?q=<city>,de&units=metric&appid=<own_appid>";
+const char* resource = RESOURCE;
 
 const unsigned long HTTP_TIMEOUT = 10000;  // max respone time from server
 
@@ -51,6 +52,7 @@ struct clientData {
   int16_t pressure;
   float windSpeed;
   int16_t windDeg;
+  int8_t clouds;
 };
 
 void initDisplay() {
@@ -120,8 +122,9 @@ bool readReponseContent(struct clientData* clientData) {
   clientData->temp = jsonDoc["main"]["temp"].as<float>();
   clientData->humidity = jsonDoc["main"]["humidity"].as<int8_t>();
   clientData->pressure = jsonDoc["main"]["pressure"].as<int16_t>();
-  clientData->windSpeed = jsonDoc["wind"]["speed"].as<float>();
+  clientData->windSpeed = jsonDoc["wind"]["speed"].as<float>() * 1.94384;
   clientData->windDeg = jsonDoc["wind"]["deg"].as<int16_t>();
+  clientData->clouds = jsonDoc["clouds"]["all"].as<int8_t>();
 
   return true;
 }
@@ -135,35 +138,42 @@ void printClientData(const struct clientData* clientData) {
 
   tft.drawString("Wetter in Paderborn", 15, 0, 2);
 
-  tft.drawString("Temperatur", 0, 30, 2);
+  tft.drawString("Temperatur", 0, 25, 2);
   char temp[6 ]; // Buffer big enough for 7-character float
   dtostrf(clientData->temp, 5, 1, temp);
-  tft.drawRightString(temp, 135, 30, 2);
-  tft.drawString("`C", 140, 30, 2);
+  tft.drawRightString(temp, 135, 25, 2);
+  tft.drawString("`C", 140, 25, 2);
 
-  tft.drawString("Luftfeuchtigkeit", 0, 50, 2);
+  tft.drawString("Luftfeuchtigkeit", 0, 42, 2);
   char humidity[4];
   sprintf(humidity, "%d", clientData->humidity);
-  tft.drawRightString(humidity, 135, 50, 2);
-  tft.drawString("%", 140, 50, 2);
+  tft.drawRightString(humidity, 135, 42, 2);
+  tft.drawString("%", 140, 42, 2);
 
-  tft.drawString("Luftdruck", 0, 70, 2);
+  tft.drawString("Luftdruck", 0, 59, 2);
   char pressure[4];
   sprintf(pressure, "%d", clientData->pressure);
-  tft.drawRightString(pressure, 135, 70, 2);
-  tft.drawString("hPa", 140, 70, 2);
+  tft.drawRightString(pressure, 135, 59, 2);
+  tft.drawString("hPa", 140, 59, 2);
 
-  tft.drawString("Windstaerke", 0, 90, 2);
+  tft.drawString("Windstaerke", 0, 76, 2);
   char windspeed[5]; // Buffer big enough for 7-character float
   dtostrf(clientData->windSpeed, 4, 1, windspeed);
-  tft.drawRightString(windspeed, 135, 90,2);
-  tft.drawString("Bft", 140, 90, 2);
+  tft.drawRightString(windspeed, 135, 76,2);
+  tft.drawString("kn", 140, 76, 2);
 
-  tft.drawString("Windrichtung", 0, 110, 2);
+  tft.drawString("Windrichtung", 0, 93, 2);
   char windDeg[4];
   sprintf(windDeg, "%d", clientData->windDeg);
-  tft.drawRightString(windDeg, 135, 110, 2);
-  tft.drawString("`", 140, 110, 2);
+  tft.drawRightString(windDeg, 135, 93, 2);
+  tft.drawString("`", 140, 93, 2);
+
+  tft.drawString("Bewoelkung", 0, 110, 2);
+  char clouds[4];
+  sprintf(clouds, "%d", clientData->clouds);
+  tft.drawRightString(clouds, 135, 110, 2);
+  tft.drawString("%", 140, 110, 2);
+
 
   // Print the data to the serial port
   Serial.print("Temp = ");
@@ -176,6 +186,8 @@ void printClientData(const struct clientData* clientData) {
   Serial.println((float) clientData->windSpeed);
   Serial.print("Wind degree = ");
   Serial.println((int16_t) clientData->windDeg);
+  Serial.print("clouds = ");
+  Serial.println((int8_t) clientData->clouds);
 }
 
 // Close the connection with the HTTP server
